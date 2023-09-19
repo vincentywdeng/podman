@@ -1,3 +1,20 @@
+## Configure remote coding in vscode
+[VS code remote tunnel](https://code.visualstudio.com/docs/remote/tunnels) is tool to develop remotely on linux box.
+
+```ssh
+curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64' --output vscode_cli.tar.gz
+tar -xf vscode_cli.tar.gz
+```
+
+Then updates the bash_profile
+
+```shell
+	GOPATH=~./go
+	PATH=$PATH:$GOPATH/bin
+```
+Extract and run the vscode tool
+`.code/tunnel`
+
 ## Build local development environment
 
 github.com/containers/podman is just the client to interactive with OCI container runtime. We need to build the container runtime to test with podman. The following steps are extracted from [https://podman.io/docs/installation#installing-on-linux](https://podman.io/docs/installation#installing-on-linux)
