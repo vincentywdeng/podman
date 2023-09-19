@@ -9,11 +9,14 @@ tar -xf vscode_cli.tar.gz
 Then updates the bash_profile
 
 ```shell
-GOPATH=~./go
+GOPATH=~/go
 PATH=$PATH:$GOPATH/bin
 ```
 Extract and run the vscode tool
 `.code/tunnel`
+
+## Install latest go. 
+It seems latest podman requires at least go 1.19. However apt-get can only get 1.18. So follow these steps to install latest go [https://go.dev/doc/install](https://go.dev/doc/install)
 
 ## Build local development environment
 
@@ -74,7 +77,7 @@ sudo curl -L -o /etc/containers/policy.json https://src.fedoraproject.org/rpms/c
 ### Build podman client
 
 ```shell
-git clone git@github.com:bioflash/podman.git
+git clone git@github.com:<you>/podman $GOPATH/src/github.com/containers/podman
 cd podman
 make
 ```
