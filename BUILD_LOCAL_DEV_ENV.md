@@ -9,8 +9,8 @@ tar -xf vscode_cli.tar.gz
 Then updates the bash_profile
 
 ```shell
-	GOPATH=~./go
-	PATH=$PATH:$GOPATH/bin
+GOPATH=~./go
+PATH=$PATH:$GOPATH/bin
 ```
 Extract and run the vscode tool
 `.code/tunnel`
@@ -22,7 +22,7 @@ github.com/containers/podman is just the client to interactive with OCI containe
 The steps shown below is for developing in ubuntu.
 
 ### Install required packages and enable user namespace
-```ssh
+```shell
 sudo add-apt-repository universe //some of the required package in in universe collection
 
 sudo apt-get install \
@@ -50,13 +50,13 @@ sudo apt-get install \
   slirp4netns
 
 sudo apt-get install containernetworking-plugins
-sudo sysctl kernel.unprivileged_userns_clone=1  // enables user namespace
-echo 'kernel.unprivileged_userns_clone=1' > /etc/sysctl.d/userns.conf // enable it permanently
+sudo sysctl kernel.unprivileged_userns_clone=1  ## enables user namespace
+echo 'kernel.unprivileged_userns_clone=1' > /etc/sysctl.d/userns.conf ## enable it permanently
 
 ```
 
 ### Install latest conmon
-```ssh
+```shell
 git clone https://github.com/containers/conmon
 cd conmon
 export GOCACHE="$(mktemp -d)"
@@ -65,20 +65,20 @@ sudo make podman
 ```
 
 ### Add registris
-```ssh
+```shell
 sudo mkdir -p /etc/containers
 sudo curl -L -o /etc/containers/registries.conf https://src.fedoraproject.org/rpms/containers-common/raw/main/f/registries.conf
 sudo curl -L -o /etc/containers/policy.json https://src.fedoraproject.org/rpms/containers-common/raw/main/f/default-policy.json
 ```
 
-### Build podman
+### Build podman client
 
-```ssh
+```shell
 cd podman
 make
 ```
 
 ### Test
-```ssh
+```shell
 podman/bin/podman run --rm -it busybox /bin/sh
 ```
