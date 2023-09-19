@@ -74,6 +74,7 @@ sudo curl -L -o /etc/containers/policy.json https://src.fedoraproject.org/rpms/c
 ### Build podman client
 
 ```shell
+git clone git@github.com:bioflash/podman.git
 cd podman
 make
 ```
