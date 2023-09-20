@@ -50,6 +50,7 @@ sudo apt-get install \
   libsystemd-dev \
   pkg-config \
   uidmap \
+  autoconf \
   slirp4netns
 
 sudo apt-get install containernetworking-plugins
