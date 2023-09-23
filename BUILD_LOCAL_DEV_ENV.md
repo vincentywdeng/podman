@@ -51,12 +51,34 @@ sudo apt-get install \
   pkg-config \
   uidmap \
   autoconf \
-  slirp4netns
+  slirp4netns \
+  libtool
 
 sudo apt-get install containernetworking-plugins
 sudo sysctl kernel.unprivileged_userns_clone=1  ## enables user namespace
 echo 'kernel.unprivileged_userns_clone=1' > /etc/sysctl.d/userns.conf ## enable it permanently
 
+```
+
+### Patch the script to install catatonit
+
+We need to patch the script to install catatonit because the automake has a bug which is not in the catatonit version we are using now
+
+```
+diff --git a/hack/install_catatonit.sh b/hack/install_catatonit.sh
+index a35e349f5..b4ab8f7f2 100755
+--- a/hack/install_catatonit.sh
++++ b/hack/install_catatonit.sh
+@@ -1,7 +1,8 @@
+ #!/usr/bin/env bash
+ BASE_PATH="/usr/libexec/podman"
+ CATATONIT_PATH="${BASE_PATH}/catatonit"
+-CATATONIT_VERSION="v0.1.7"
++#CATATONIT_VERSION="v0.1.7"
++CATATONIT_VERSION="99bb904"
+ set -e
+
+ if [ -f $CATATONIT_PATH ] && [ -z "$1" ]; then
 ```
 
 ### Install latest conmon
