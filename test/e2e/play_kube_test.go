@@ -22,6 +22,7 @@ import (
 	"github.com/containers/podman/v4/libpod/define"
 	"github.com/containers/podman/v4/pkg/bindings"
 	"github.com/containers/podman/v4/pkg/bindings/play"
+	v1 "github.com/containers/podman/v4/pkg/k8s.io/api/core/v1"
 	"github.com/containers/podman/v4/pkg/util"
 	. "github.com/containers/podman/v4/test/utils"
 	"github.com/containers/podman/v4/utils"
@@ -698,6 +699,7 @@ spec:
     configMap:
       name: {{ .ConfigMap.Name }}
       optional: {{ .ConfigMap.Optional }}
+      defaultMode: {{ .ConfigMap.DefaultMode }}
       {{- with .ConfigMap.Items }}
       items:
       {{- range . }}
@@ -1846,6 +1848,7 @@ type ConfigMap struct {
 	Name     string
 	Items    []map[string]string
 	Optional bool
+	DefaultMode int32
 }
 
 type SecretVol struct {
@@ -1893,16 +1896,23 @@ func getPersistentVolumeClaimVolume(vName string) *Volume {
 
 // getConfigMap returns a new ConfigMap Volume given the name and items
 // of the ConfigMap.
-func getConfigMapVolume(vName string, items []map[string]string, optional bool) *Volume { //nolint:unparam
-	return &Volume{
+func getConfigMapVolume(vName string, items []map[string]string, optional bool, defaultMode *int32) *Volume { //nolint:unparam
+	volume:= &Volume{
 		VolumeType: "ConfigMap",
 		Name:       defaultVolName,
 		ConfigMap: ConfigMap{
 			Name:     vName,
 			Items:    items,
 			Optional: optional,
+			DefaultMode: v1.ConfigMapVolumeSourceDefaultMode,
 		},
 	}
+
+	//If defaultMode is not given, set it to -1, such that template will not add it in the final yaml file
+	if defaultMode != nil {
+		volume.ConfigMap.DefaultMode = *defaultMode
+	} 
+	return volume
 }
 
 func getSecretVolume(vName string, items []map[string]string, optional bool) *Volume {
@@ -1990,6 +2000,45 @@ func createAndTestSecret(podmanTest *PodmanTestIntegration, secretYamlString, se
 	secretListQuiet.WaitWithDefaultTimeout()
 	Expect(secretListQuiet).Should(Exit(0))
 	Expect(kube.OutputToString()).Should(ContainSubstring(secretListQuiet.OutputToString()))
+}
+
+// The generated pod yaml won't contain defaultMode if defaultMode < 0
+func createAndTestConfigVolumeWithItems(kubeYaml string, defaultMode *int32, expectedPermission string) {
+	volumeName := "cmVol"
+	cm := getConfigMap(withConfigMapName(volumeName), withConfigMapData("FOO", "foobar"))
+	cmYaml, err := getKubeYaml("configmap", cm)
+	Expect(err).ToNot(HaveOccurred())
+	volumeContents := []map[string]string{{
+		"key":  "FOO",
+		"path": "BAR",
+	}}
+
+	ctr := getCtr(withVolumeMount("/test", "", false), withImage(BB))
+	pod := getPod(withVolume(getConfigMapVolume(volumeName, volumeContents, false, defaultMode)), withCtr(ctr))
+	podYaml, err := getKubeYaml("pod", pod)
+	Expect(err).ToNot(HaveOccurred())
+	yamls := []string{cmYaml, podYaml}
+	err = generateMultiDocKubeYaml(yamls, kubeYaml)
+	Expect(err).ToNot(HaveOccurred())
+
+	kube := podmanTest.Podman([]string{"play", "kube", kubeYaml})
+	kube.WaitWithDefaultTimeout()
+	Expect(kube).Should(Exit(0))
+
+	cmData := podmanTest.Podman([]string{"exec", getCtrNameInPod(pod), "cat", "/test/BAR"})
+	cmData.WaitWithDefaultTimeout()
+			Expect(cmData).Should(Exit(0))
+	Expect(cmData.OutputToString()).To(Equal("foobar"))
+
+	cmData = podmanTest.Podman([]string{"exec", getCtrNameInPod(pod), "cat", "/test/FOO"})
+	cmData.WaitWithDefaultTimeout()
+	Expect(cmData).Should(Not(Exit(0)))
+
+	volumeInspect := podmanTest.Podman([]string{"exec", getCtrNameInPod(pod), "stat", "-c", "%a", "/test/BAR"})
+	volumeInspect.WaitWithDefaultTimeout()
+	Expect(volumeInspect).Should(ExitCleanly())
+	Expect(volumeInspect.OutputToString()).To(Equal(expectedPermission))
+	Expect(volumeInspect).Should(Exit(0))
 }
 
 func deleteAndTestSecret(podmanTest *PodmanTestIntegration, secretName string) {
@@ -3556,7 +3605,7 @@ VOLUME %s`, ALPINE, hostPathDir+"/")
 		Expect(err).ToNot(HaveOccurred())
 
 		ctr := getCtr(withVolumeMount("/test", "", false), withImage(BB))
-		pod := getPod(withVolume(getConfigMapVolume(volumeName, []map[string]string{}, false)), withCtr(ctr))
+		pod := getPod(withVolume(getConfigMapVolume(volumeName, []map[string]string{}, false, nil)), withCtr(ctr))
 		podYaml, err := getKubeYaml("pod", pod)
 		Expect(err).ToNot(HaveOccurred())
 		yamls := []string{cmYaml, podYaml}
@@ -3574,42 +3623,14 @@ VOLUME %s`, ALPINE, hostPathDir+"/")
 	})
 
 	It("podman play kube ConfigMap volume with items", func() {
-		volumeName := "cmVol"
-		cm := getConfigMap(withConfigMapName(volumeName), withConfigMapData("FOO", "foobar"))
-		cmYaml, err := getKubeYaml("configmap", cm)
-		Expect(err).ToNot(HaveOccurred())
-		volumeContents := []map[string]string{{
-			"key":  "FOO",
-			"path": "BAR",
-		}}
-
-		ctr := getCtr(withVolumeMount("/test", "", false), withImage(BB))
-		pod := getPod(withVolume(getConfigMapVolume(volumeName, volumeContents, false)), withCtr(ctr))
-		podYaml, err := getKubeYaml("pod", pod)
-		Expect(err).ToNot(HaveOccurred())
-		yamls := []string{cmYaml, podYaml}
-		err = generateMultiDocKubeYaml(yamls, kubeYaml)
-		Expect(err).ToNot(HaveOccurred())
-
-		kube := podmanTest.Podman([]string{"play", "kube", kubeYaml})
-		kube.WaitWithDefaultTimeout()
-		Expect(kube).Should(Exit(0))
-
-		cmData := podmanTest.Podman([]string{"exec", getCtrNameInPod(pod), "cat", "/test/BAR"})
-		cmData.WaitWithDefaultTimeout()
-		Expect(cmData).Should(Exit(0))
-		Expect(cmData.OutputToString()).To(Equal("foobar"))
-
-		cmData = podmanTest.Podman([]string{"exec", getCtrNameInPod(pod), "cat", "/test/FOO"})
-		cmData.WaitWithDefaultTimeout()
-		Expect(cmData).Should(Not(Exit(0)))
+		createAndTestConfigVolumeWithItems(kubeYaml, nil, "644")
 	})
 
 	It("podman play kube with a missing optional ConfigMap volume", func() {
 		volumeName := "cmVol"
 
 		ctr := getCtr(withVolumeMount("/test", "", false), withImage(BB))
-		pod := getPod(withVolume(getConfigMapVolume(volumeName, []map[string]string{}, true)), withCtr(ctr))
+		pod := getPod(withVolume(getConfigMapVolume(volumeName, []map[string]string{}, true, nil)), withCtr(ctr))
 		err = generateKubeYaml("pod", pod, kubeYaml)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -3655,6 +3676,11 @@ VOLUME %s`, ALPINE, hostPathDir+"/")
 		Expect(volList2.OutputToString()).To(Equal(""))
 	})
 
+	It("podman play kube with ConfigMap volume and DefaultMode", func () {
+		var defaultMode int32 = 0777
+		createAndTestConfigVolumeWithItems(kubeYaml, &defaultMode, "777")
+	})
+	
 	It("podman play kube applies labels to pods", func() {
 		var numReplicas int32 = 5
 		expectedLabelKey := "key1"
@@ -5336,7 +5362,7 @@ spec:
 		}}
 
 		ctr := getCtr(withPullPolicy("always"), withName("testctr"), withCmd([]string{"top"}), withVolumeMount("/etc/BAR", "BAR", false), withImage(ALPINE))
-		pod := getPod(withPodName("testpod"), withVolume(getConfigMapVolume(volumeName, volumeContents, false)), withCtr(ctr))
+		pod := getPod(withPodName("testpod"), withVolume(getConfigMapVolume(volumeName, volumeContents, false, nil)), withCtr(ctr))
 
 		podYaml, err := getKubeYaml("pod", pod)
 		Expect(err).ToNot(HaveOccurred())

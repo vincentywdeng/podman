@@ -48,6 +48,12 @@ type KubeVolume struct {
 	// If the volume is optional, we can move on if it is not found
 	// Only used when there are volumes in a yaml that refer to a configmap
 	Optional bool
+	// Optional: mode bits used to set permissions on created files by default.
+	// Defaults to 0644.
+	// Directories within the path are not affected by this setting.
+	// This might be in conflict with other options that affect the file
+	// mode, like fsGroup, and the result can be other mode bits set.
+	DefaultMode int32
 }
 
 // Create a KubeVolume from an HostPathVolumeSource
@@ -132,9 +138,10 @@ func VolumeFromHostPath(hostPath *v1.HostPathVolumeSource, mountLabel string) (*
 // VolumeFromSecret creates a new kube volume from a kube secret.
 func VolumeFromSecret(secretSource *v1.SecretVolumeSource, secretsManager *secrets.SecretsManager) (*KubeVolume, error) {
 	kv := &KubeVolume{
-		Type:   KubeVolumeTypeSecret,
-		Source: secretSource.SecretName,
-		Items:  map[string][]byte{},
+		Type:        KubeVolumeTypeSecret,
+		Source:      secretSource.SecretName,
+		DefaultMode: v1.SecretVolumeSourceDefaultMode,
+		Items:       map[string][]byte{},
 	}
 
 	// returns a byte array of a kube secret data, meaning this needs to go into a string map
@@ -152,6 +159,11 @@ func VolumeFromSecret(secretSource *v1.SecretVolumeSource, secretsManager *secre
 	err = yaml.Unmarshal(secretByte, secret)
 	if err != nil {
 		return nil, err
+	}
+
+	// Only change defaultMode when the specified mode is between 0 to 0777
+	if secretSource.DefaultMode != nil && *secretSource.DefaultMode >= 0 && *secretSource.DefaultMode <= int32(os.ModePerm) {
+		kv.DefaultMode = *secretSource.DefaultMode
 	}
 
 	// If there are Items specified in the volumeSource, that overwrites the Data from the Secret
@@ -188,8 +200,9 @@ func VolumeFromPersistentVolumeClaim(claim *v1.PersistentVolumeClaimVolumeSource
 func VolumeFromConfigMap(configMapVolumeSource *v1.ConfigMapVolumeSource, configMaps []v1.ConfigMap) (*KubeVolume, error) {
 	var configMap *v1.ConfigMap
 	kv := &KubeVolume{
-		Type:  KubeVolumeTypeConfigMap,
-		Items: map[string][]byte{},
+		Type:        KubeVolumeTypeConfigMap,
+		Items:       map[string][]byte{},
+		DefaultMode: v1.ConfigMapVolumeSourceDefaultMode,
 	}
 	for _, cm := range configMaps {
 		if cm.Name == configMapVolumeSource.Name {
@@ -197,6 +210,10 @@ func VolumeFromConfigMap(configMapVolumeSource *v1.ConfigMapVolumeSource, config
 			// Set the source to the config map name
 			kv.Source = cm.Name
 			configMap = &matchedCM
+			// Only change defaultMode when the specified mode is between 0 to 0777
+			if configMapVolumeSource.DefaultMode != nil && *configMapVolumeSource.DefaultMode >= 0 && *configMapVolumeSource.DefaultMode <= int32(os.ModePerm) {
+				kv.DefaultMode = *configMapVolumeSource.DefaultMode
+			}
 			break
 		}
 	}
