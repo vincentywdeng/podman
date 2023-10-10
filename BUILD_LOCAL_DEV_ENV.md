@@ -109,3 +109,27 @@ make
 ```shell
 podman/bin/podman run --rm -it busybox /bin/sh
 ```
+
+### Debug with VSCode
+To debug podman with CLI options, we need to add the CLI options in the launch.json, for example.
+Please note that we need to also set `"buidFlags": "-tags=seccomp"` to have debugger build podman with seccomp enabled. This is how to [pass build tags](https://github.com/microsoft/vscode-go/issues/3185#issuecomment-616791855) to VSCode debugger. 
+
+```json
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Package",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${fileDirname}",
+            "args":["run", "--device", "vendor.com/device=myDevice", "alpine", "top"],
+            "buildFlags": "-tags=seccomp"
+        }
+    ]
+}
+```
